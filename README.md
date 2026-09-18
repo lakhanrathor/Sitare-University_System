@@ -58,11 +58,11 @@ Open <http://localhost:5173>. Vite proxies `/api` and `/socket.io` to the API.
 
 ### Getting past the first login
 
-`npm run seed` creates exactly one account — `admin@sitare.org` / `admin123` — and nothing
+`npm run seed` creates exactly one account —and nothing
 else. Sections, faculty, students, subjects and the timetable all start empty on purpose, so
 the real workflow can be exercised from a clean slate:
 
-1. Log in as `admin@sitare.org`.
+1. Log in
 2. **Admin → Academics** — create a section and a subject or two.
 3. **Admin → People** — add faculty and students by hand, or bulk-import a roster (PDF or CSV).
 4. **Admin → Manage Timetable** — upload/paste a weekly grid and publish it.
@@ -144,12 +144,7 @@ must confirm before publishing.
 
 Pasting rows is kept as a fallback, and the CSV template / "Export as CSV" feed that box:
 
-```csv
-day,slot,section,subjectCode,facultyEmail,kind,title
-Monday,4,A,WAD,ankit.mehta@sitare.org,lecture,
-Tuesday,3,A,OSP,deepak.rao@sitare.org,office-hours,
-Friday,1,B,,,event,Session with Dean
-```
+
 
 `slot` is 1-6 (9:00, 10:00, 11:00, 1:30, 2:30, 3:30) · `kind` is `lecture`, `office-hours` or `event`.
 
