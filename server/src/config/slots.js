@@ -16,7 +16,6 @@ export const SLOTS = [
 export const LUNCH = { label: 'LUNCH', start: '12:30', end: '13:30', afterSlot: 3 };
 
 export const SLOT_NUMBERS = SLOTS.map((s) => s.slot);
-export const getSlot = (n) => SLOTS.find((s) => s.slot === Number(n)) || null;
 export const isValidSlot = (n) => SLOT_NUMBERS.includes(Number(n));
 
 /** 1 = Monday … 7 = Sunday (ISO). */

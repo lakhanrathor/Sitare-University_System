@@ -88,11 +88,6 @@ export const todayKey = () => {
   return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 };
 
-export function dayOfWeekKey(dateKey) {
-  const js = new Date(`${dateKey}T00:00:00.000Z`).getUTCDay();
-  return js === 0 ? 7 : js;
-}
-
 /**
  * Which calendar date does a recurring weekday land on for a swap?
  *

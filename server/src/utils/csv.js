@@ -2,13 +2,41 @@
  * Minimal RFC-4180 CSV reader — enough for timetable uploads without pulling
  * in a dependency. Handles quoted fields, embedded commas/newlines and "".
  */
-export function parseCSV(text) {
-  const rows = [];
+/**
+ * The scan itself, carrying the source line each row began on.
+ *
+ * Tracking it here rather than numbering rows afterwards is the whole point:
+ * an admin is told "row 12 was skipped" and goes to line 12 of their file.
+ * Numbering the rows this returns gets that wrong the moment the file holds a
+ * blank line or a quoted field spanning two lines — both ordinary in an
+ * exported spreadsheet, and exactly the files where the number is needed.
+ */
+function scanCSV(text) {
+  const out = [];
   let row = [];
   let field = '';
   let inQuotes = false;
+  let line = 1;
+  let rowLine = 1;
+  let started = false;
 
   const src = String(text).replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+
+  // A row belongs to the line its first character appeared on.
+  const begin = () => {
+    if (!started) {
+      rowLine = line;
+      started = true;
+    }
+  };
+
+  const endRow = () => {
+    row.push(field);
+    out.push({ cells: row, line: rowLine });
+    row = [];
+    field = '';
+    started = false;
+  };
 
   for (let i = 0; i < src.length; i += 1) {
     const ch = src[i];
@@ -19,29 +47,32 @@ export function parseCSV(text) {
           field += '"';
           i += 1;
         } else inQuotes = false;
-      } else field += ch;
+      } else {
+        // A newline inside quotes stays in the value but still moves the file on.
+        if (ch === '\n') line += 1;
+        field += ch;
+      }
       continue;
     }
 
+    begin();
     if (ch === '"') inQuotes = true;
     else if (ch === ',') {
       row.push(field);
       field = '';
     } else if (ch === '\n') {
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = '';
+      endRow();
+      line += 1;
     } else field += ch;
   }
 
-  if (field.length || row.length) {
-    row.push(field);
-    rows.push(row);
-  }
+  if (field.length || row.length) endRow();
 
-  return rows.filter((r) => r.some((c) => c.trim() !== ''));
+  return out;
 }
+
+/** A row that is entirely empty is spacing, not data. */
+const hasContent = (cells) => cells.some((c) => c.trim() !== '');
 
 /**
  * What a column is called, versus what it means.
@@ -117,14 +148,14 @@ export function resolveHeaders(headers, schema) {
  * the schema does not know about is still readable.
  */
 export function parseCSVToObjects(text, schema = null) {
-  const rows = parseCSV(text);
+  const rows = scanCSV(text).filter((r) => hasContent(r.cells));
   if (!rows.length) return { headers: [], records: [] };
 
-  const headers = rows[0].map(norm);
+  const headers = rows[0].cells.map(norm);
   const resolved = schema ? resolveHeaders(headers, schema) : {};
 
-  const records = rows.slice(1).map((cells, idx) => {
-    const obj = { __line: idx + 2 }; // 1-based, and the header occupies line 1
+  const records = rows.slice(1).map(({ cells, line }) => {
+    const obj = { __line: line }; // the file's own line, not this row's index
     headers.forEach((h, i) => {
       obj[h] = (cells[i] ?? '').trim();
     });

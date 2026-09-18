@@ -1,7 +1,7 @@
 import http from 'http';
 import app from './app.js';
 import { env } from './config/env.js';
-import { prisma } from './config/prisma.js';
+import { prisma, disconnectPrisma } from './config/prisma.js';
 import { initSocket } from './sockets/index.js';
 
 const server = http.createServer(app);
@@ -45,5 +45,13 @@ process.on('uncaughtException', (err) => {
 
 process.on('SIGINT', () => {
   console.log('\n[api] Shutting down');
-  server.close(() => process.exit(0));
+  /*
+   * Stop taking connections, then let go of the database pool. Exiting always
+   * happens: a disconnect that fails or hangs must not be what keeps the
+   * process alive.
+   */
+  server.close(async () => {
+    await disconnectPrisma().catch(() => {});
+    process.exit(0);
+  });
 });

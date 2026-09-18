@@ -290,9 +290,23 @@ export const listSubjectOccurrences = asyncHandler(async (req, res) => {
   const timetable = await getPublishedTimetable(subject.semester);
   const windowStart = addDays(today, -60);
   const effective = timetable?.effectiveFromKey;
-  const gridFrom = req.query.from || (effective && effective > windowStart ? effective : windowStart);
   const to = req.query.to || addDays(today, 14);
   const sessionsFrom = addDays(today, -365);
+
+  /*
+   * Clamped, because `from` arrives straight off the query string with no
+   * schema behind this route. `?from=1970-01-01` built a forty-seven-thousand
+   * element array, carried it into three `IN` queries and an O(dates × entries)
+   * merge — from any faculty login. This is the picker behind "which class am I
+   * marking", not an archive: a window wider than the term is not a request
+   * anyone makes on purpose. The ClassSession read below already bounds itself
+   * at a year; this brings the grid path into line.
+   */
+  const GRID_WINDOW_DAYS = 120;
+  const earliest = addDays(to, -GRID_WINDOW_DAYS);
+  let gridFrom = req.query.from || (effective && effective > windowStart ? effective : windowStart);
+  if (gridFrom < earliest) gridFrom = earliest;
+  if (gridFrom > to) gridFrom = to;
 
   const dates = [];
   for (let d = gridFrom; d <= to; d = addDays(d, 1)) dates.push(d);

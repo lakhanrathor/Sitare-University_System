@@ -837,9 +837,13 @@ model Notification {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@index([userId])
-  @@index([read])
+  /// One index for the only query that matters: the bell reads a user's rows
+  /// newest first, and a sort key cannot be reached across a skipped middle
+  /// column — so (userId, read, createdAt) forced an in-memory sort on every
+  /// poll, on the busiest table here. The unread count filters `read` after
+  /// this index has narrowed to one user, which is cheap. A standalone (read)
+  /// index served nothing: it is never queried alone.
+  @@index([userId, createdAt(sort: Desc)])
   @@index([createdById])
-  @@index([userId, read, createdAt(sort: Desc)])
   @@map("notifications")
 }

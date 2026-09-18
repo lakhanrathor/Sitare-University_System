@@ -85,7 +85,7 @@ export default function StudentProfile() {
 
   const remove = async (doc) => {
     try {
-      await api.deleteLeaveDocument(doc.id);
+      await api.deleteLeave(doc.id);
       notify('Record deleted', { variant: 'success' });
       load();
     } catch (err) {

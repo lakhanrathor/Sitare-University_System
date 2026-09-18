@@ -58,10 +58,6 @@ export function initSocket(httpServer) {
   return io;
 }
 
-export function getIO() {
-  return io;
-}
-
 /** Push an event to a set of user ids (students affected by a change). */
 export function emitToUsers(userIds, event, payload) {
   if (!io) return;

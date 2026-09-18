@@ -85,12 +85,6 @@ export const subjectSchema = z.object({
   enrolAllInSection: z.boolean().optional().default(true),
 });
 
-export const importStudentsSchema = z.object({
-  csv: z.string().min(1),
-  semester: z.number().int().min(1).max(10),
-  dryRun: z.boolean().optional().default(false),
-});
-
 /* ------------------------------------------------------------------ */
 /* Overview                                                            */
 /* ------------------------------------------------------------------ */
@@ -313,7 +307,25 @@ export const listFacultyWithLoad = asyncHandler(async (_req, res) => {
     orderBy: [{ code: 'asc' }, { sectionId: { sort: 'asc', nulls: 'first' } }],
     include: { section: { select: { name: true } } },
   });
-  const entries = await prisma.timetableEntry.findMany();
+  /*
+   * Published grids only, and counted in the database.
+   *
+   * This was every TimetableEntry ever written. Each publish writes a fresh
+   * set and archives the old one rather than deleting it, so the table grows
+   * all year while this figure only concerns what is running now — a
+   * lecturer's load counted periods from grids nobody teaches from any more,
+   * and grew every time a timetable was republished.
+   */
+  const liveTimetables = await prisma.timetable.findMany({
+    where: { status: 'published' },
+    select: { id: true },
+  });
+  const load = await prisma.timetableEntry.groupBy({
+    by: ['facultyId'],
+    where: { timetableId: { in: liveTimetables.map(idOf) }, facultyId: { not: null } },
+    _count: { _all: true },
+  });
+  const periodsByFaculty = new Map(load.map((r) => [r.facultyId, r._count._all]));
 
   res.json({
     success: true,
@@ -325,7 +337,7 @@ export const listFacultyWithLoad = asyncHandler(async (_req, res) => {
         email: f.email,
         employeeId: f.employeeId,
         subjectCount: mine.length,
-        periodsPerWeek: entries.filter((e) => sameId(e.facultyId, f)).length,
+        periodsPerWeek: periodsByFaculty.get(f.id) || 0,
         subjects: mine.map((s) => `${s.code} · Sec ${s.section?.name ?? '—'}`),
       };
     }),

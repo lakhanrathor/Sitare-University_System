@@ -140,15 +140,3 @@ export function mergeIntoCells(rowItems, gap = 12) {
   }
   return cells;
 }
-
-/** Convenience: rows of merged cell strings, page by page. */
-export async function extractTable(buffer, { rowTolerance = 4, cellGap = 12 } = {}) {
-  const items = await extractItems(buffer);
-  const rows = groupIntoRows(items, rowTolerance);
-  return rows.map((r) => ({
-    page: r.page,
-    y: r.y,
-    cells: mergeIntoCells(r.items, cellGap),
-    text: r.text,
-  }));
-}

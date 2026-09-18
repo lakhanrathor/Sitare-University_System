@@ -71,7 +71,7 @@ at the repo root starts one).
 
 ```bash
 npm run setup                          # installs root + server + client deps
-npm --prefix server exec prisma migrate deploy   # create the schema
+cd server && npx prisma migrate deploy && cd ..  # create the schema
 npm run seed                           # resets the DB and creates one admin account — safe to re-run
 npm run dev                            # API on :5000 (auto-restarts on save) + web on :5173, together
 ```

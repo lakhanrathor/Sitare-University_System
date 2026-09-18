@@ -105,7 +105,32 @@ async function request(path, { method = 'GET', body, form, signal, repeatable } 
     throw new ApiError(message, res.status, payload?.details);
   }
 
-  return payload?.data ?? payload;
+  /*
+   * The envelope is `{ success, message, data }` and callers want `data` — but
+   * every write also sends a message, and unwrapping to `data` alone threw it
+   * away. Fifteen call sites render it, so each showed a success toast with a
+   * title and an empty body: creating a subject, importing a roster,
+   * publishing a timetable, deciding a swap.
+   *
+   * Three things this must not do, which is why it is not a one-line spread:
+   *   - an array response stays an array (the swap candidate list is one), or
+   *     every caller that iterates the result breaks;
+   *   - `data` of null or a bare string passes through untouched;
+   *   - a `message` belonging to the data itself wins. A notification row has
+   *     its own `message`, and the envelope's must never overwrite one.
+   */
+  const { data, message } = payload ?? {};
+  if (data === undefined) return payload;
+  if (
+    message &&
+    data !== null &&
+    typeof data === 'object' &&
+    !Array.isArray(data) &&
+    data.message === undefined
+  ) {
+    return { ...data, message };
+  }
+  return data;
 }
 
 /**

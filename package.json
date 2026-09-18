@@ -12,7 +12,7 @@
     "restart": "npm run stop && npm run dev",
     "start": "npm --prefix server run start",
     "build": "npm --prefix client run build",
-    "setup": "npm install && npm --prefix server install && npm --prefix client install",
+    "setup": "npm install && npm --prefix server install && npm --prefix client install && npm --prefix server run build",
     "seed": "npm --prefix server run seed"
   },
   "devDependencies": {

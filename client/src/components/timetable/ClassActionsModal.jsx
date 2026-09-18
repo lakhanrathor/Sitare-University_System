@@ -434,7 +434,9 @@ export default function ClassActionsModal({
               hint={
                 candidates.length
                   ? `${feasibleCount} of ${candidates.length} classes can be swapped with this one. Each of you keeps your own subject — only the period changes hands.`
-                  : 'Your class takes their period and theirs takes yours.'
+                  : occurrence.faculty
+                    ? 'Your class takes their period and theirs takes yours.'
+                    : 'This period has no lecturer assigned, so there is nobody to swap with.'
               }
             >
               <Select value={candidateId} onChange={(e) => setCandidateId(e.target.value)}>

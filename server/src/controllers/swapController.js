@@ -689,15 +689,15 @@ export const listSwapCandidates = asyncHandler(async (req, res) => {
   const mySection = mine.sectionId;
   const mySemester = semesterOf(mine);
 
-  if (!myFaculty) {
-    return res.json({
-      success: true,
-      data: {
-        candidates: [],
-        note: 'This period has no lecturer assigned, so there is nobody to swap with.',
-      },
-    });
-  }
+  /*
+   * One shape on every path. This branch used to answer `{ candidates, note }`
+   * where every other answers a bare array, and the client filters the result
+   * directly — so it threw a TypeError for exactly the state this system
+   * creates on purpose: purgeService leaves a subject standing with no
+   * lecturer when an account is deleted. The note went with it and is not
+   * missed; the client knows the period has no lecturer and says so itself.
+   */
+  if (!myFaculty) return res.json({ success: true, data: [] });
 
   /*
    * Candidates are read off what is actually happening this week — not the

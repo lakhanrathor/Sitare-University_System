@@ -19,14 +19,6 @@ import {
 import { notify, facultyAndAdminIds, studentAudience } from '../services/notificationService.js';
 import { emitToUsers } from '../sockets/index.js';
 
-export const uploadSchema = z.object({
-  name: z.string().min(1, 'Give this timetable a name').max(120),
-  semester: z.number().int().min(1).max(10),
-  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD'),
-  csv: z.string().min(1, 'CSV content is required'),
-  publish: z.boolean().optional().default(false),
-});
-
 /* ------------------------------------------------------------------ */
 /* Correcting a period                                                 */
 /* ------------------------------------------------------------------ */
