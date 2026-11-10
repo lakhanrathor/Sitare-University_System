@@ -53,7 +53,7 @@ export const styleFor = (status) => STATUS_STYLES[status] || STATUS_STYLES['no-d
  * Client-side mirror of the server's status rule, for views that receive a raw
  * percentage without a precomputed status.
  */
-export function attendanceStatusFromPct(pct, min = 75) {
+export function attendanceStatusFromPct(pct, min = 90) {
   if (pct === null || pct === undefined) return 'no-data';
   if (pct >= min) return 'good';
   if (pct >= min - 10) return 'warning';

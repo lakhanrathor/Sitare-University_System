@@ -89,6 +89,21 @@ export const todayKey = () => {
 };
 
 /**
+ * Whether a period is already over. Mirrors the server rule in
+ * timetableService: comparing dates alone leaves this morning's nine o'clock
+ * looking editable all afternoon.
+ */
+export const periodHasPassed = (dateKey, slot, slots = []) => {
+  const today = todayKey();
+  if (dateKey < today) return true;
+  if (dateKey > today) return false;
+  const end = slots.find((s) => s.slot === Number(slot))?.end;
+  const now = new Date();
+  const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  return Boolean(end) && end <= hhmm;
+};
+
+/**
  * Which calendar date does a recurring weekday land on for a swap?
  *
  * Use the same week as the class being offered, so the two sides stay close

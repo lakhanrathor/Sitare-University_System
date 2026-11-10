@@ -11,6 +11,7 @@ function SubjectCard({ s }) {
   const progress = s.plannedClasses ? Math.min((s.conducted / s.plannedClasses) * 100, 100) : 0;
   const standIn = s.standingIn;
   const coTeach = s.coTeaching;
+  const assisting = s.assisting;
   // A stand-in holds one register, not the subject — the report is not
   // theirs. A co-teacher (a standing per-period split, not a one-off
   // hand-over) genuinely shares the subject, so they see the report too.
@@ -30,6 +31,11 @@ function SubjectCard({ s }) {
               Sem {s.semester}
               {s.section?.name ? ` · Sec ${s.section.name}` : ''}
             </span>
+            {assisting && (
+              <span className="rounded-md bg-violet-100 px-1.5 py-0.5 text-[11px] font-bold text-violet-700">
+                TA
+              </span>
+            )}
           </div>
           <h3 className="mt-2 truncate text-sm font-semibold text-slate-900">{s.name}</h3>
           <p className="mt-0.5 text-xs text-slate-500">
@@ -41,6 +47,29 @@ function SubjectCard({ s }) {
             covers only the dates listed — saying which matters, because it is
             not the subject and not next week.
           */}
+          {/*
+            A TA has the same access as the lecturer, so nothing here is about
+            permission — it says whose subject this actually is, which is the
+            one thing the rest of the card cannot show.
+          */}
+          {assisting && (
+            <div className="mt-1.5 rounded border border-violet-200 bg-violet-50 px-1.5 py-1 text-[11px] text-violet-800">
+              <p className="font-medium">
+                You are TA for {assisting.forName || 'this subject'}
+              </p>
+            </div>
+          )}
+
+          {/* The lecturer's own card names their assistant. */}
+          {!assisting && s.tas?.length > 0 && (
+            <p className="mt-1.5 text-[11px] text-slate-500">
+              {s.tas.length === 1 ? 'TA' : 'TAs'}:{' '}
+              <span className="font-medium text-slate-700">
+                {s.tas.map((t) => t.name).join(', ')}
+              </span>
+            </p>
+          )}
+
           {standIn && !standIn.ownSubject && (
             <div className="mt-1.5 rounded border border-amber-200 bg-amber-50 px-1.5 py-1 text-[11px] text-amber-800">
               <p className="font-medium">

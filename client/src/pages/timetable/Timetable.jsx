@@ -13,6 +13,7 @@ import {
   weekLabel,
   shortDate,
   isGone,
+  periodHasPassed,
 } from '../../lib/timetable';
 import SlotCell from '../../components/timetable/SlotCell';
 import BookSlotModal from '../../components/timetable/BookSlotModal';
@@ -371,7 +372,7 @@ export default function Timetable() {
                           <SlotCell
                             occurrences={occ}
                             currentUserId={user?.id}
-                            canBook={isStaff && free && c.day.date >= todayKey()}
+                            canBook={isStaff && free && !periodHasPassed(c.day.date, slot.slot, periods)}
                             onBook={() =>
                               setBookTarget({
                                 date: c.day.date,

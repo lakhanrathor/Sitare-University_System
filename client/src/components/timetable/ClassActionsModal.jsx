@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useToast } from '../../context/ToastContext';
-import { shortDate, todayKey } from '../../lib/timetable';
+import { shortDate, todayKey, periodHasPassed } from '../../lib/timetable';
 import { sectionLabel } from '../../lib/format';
 import { Modal, Button, Field, Select, Textarea, ErrorNote, InfoNote } from '../ui';
 
@@ -198,6 +198,17 @@ export default function ClassActionsModal({
    * state only reaches here defensively; the grid never renders these as
    * clickable (see isGone in lib/timetable), so this stays informational.
    */
+  /*
+   * Over means over, to the period rather than the day. Both ends of a moved
+   * class count: once either hour has gone by, one of them either ran or did
+   * not, and undoing the move afterwards decides that retrospectively.
+   */
+  const past =
+    periodHasPassed(occurrence.date, occurrence.slot, slots) ||
+    (occurrence.movedTo
+      ? periodHasPassed(occurrence.movedTo.date, occurrence.movedTo.slot, slots)
+      : false);
+
   const isGoneOrigin = ['moved-out', 'cancelled'].includes(occurrence.origin);
 
   if (isGoneOrigin) {
@@ -212,7 +223,7 @@ export default function ClassActionsModal({
             <Button variant="secondary" onClick={onClose}>
               Close
             </Button>
-            {canManage && !occurrence.swapRequest && occurrence.changeId && (
+            {canManage && !occurrence.swapRequest && occurrence.changeId && !past && (
               <Button variant="danger" onClick={doUndo} loading={busy}>
                 <Undo2 className="h-4 w-4" />
                 Undo this change
@@ -247,7 +258,7 @@ export default function ClassActionsModal({
    */
   const hasHistory = ['moved-in', 'swapped-in', 'extra'].includes(occurrence.origin);
   const fromSwap = Boolean(occurrence.swapRequest);
-  const canUndo = canManage && hasHistory && !fromSwap && occurrence.changeId;
+  const canUndo = canManage && hasHistory && !fromSwap && occurrence.changeId && !past;
 
   if (!canManage) {
     return (
@@ -280,8 +291,6 @@ export default function ClassActionsModal({
       </Modal>
     );
   }
-
-  const past = occurrence.date < todayKey();
 
   return (
     <Modal
@@ -403,11 +412,13 @@ export default function ClassActionsModal({
               </Field>
               <Field label="New period">
                 <Select value={toSlot} onChange={(e) => setToSlot(e.target.value)}>
-                  {slots.map((s) => (
-                    <option key={s.slot} value={s.slot}>
-                      {s.label}
-                    </option>
-                  ))}
+                  {slots
+                    .filter((s) => !periodHasPassed(toDate, s.slot, slots))
+                    .map((s) => (
+                      <option key={s.slot} value={s.slot}>
+                        {s.label}
+                      </option>
+                    ))}
                 </Select>
               </Field>
             </div>
@@ -524,12 +535,18 @@ export default function ClassActionsModal({
 
                 <Field
                   label={`Marked by · ${shortDate(occurrence.date)} only`}
-                  hint="Anyone can be chosen, but lecturers already teaching in this period are flagged."
+                  hint="Only lecturers free in this period are listed."
                 >
                   <Select value={markerId} onChange={(e) => setMarkerId(e.target.value)}>
                     <option value="">Its own lecturer</option>
-                    {[...marking.candidates]
-                      .sort((a, b) => Number(b.free) - Number(a.free) || a.name.localeCompare(b.name))
+                    {/* Someone already teaching in this period cannot take a
+                        second register at the same time, so listing them only
+                        invites a choice that will be refused. The one already
+                        standing in is kept whatever they are doing, or the
+                        field would read as empty. */}
+                    {marking.candidates
+                      .filter((c) => c.free || c.id === markerId)
+                      .sort((a, b) => a.name.localeCompare(b.name))
                       .map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name}

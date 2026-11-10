@@ -113,13 +113,14 @@ export default function Academics() {
             semester: String(s.semester),
             sectionId: s.section?.id || '',
             facultyId: s.faculty?.id || '',
+            taIds: (s.tas || []).map((t) => t.id),
             credits: String(s.credits),
             plannedClasses: String(s.plannedClasses),
             minAttendance: String(s.minAttendance),
           }
         : {
             code: '', name: '', semester: String(semesters[0] ?? 3), sectionId: '',
-            facultyId: '', credits: '3', plannedClasses: '30', minAttendance: '75',
+            facultyId: '', taIds: [], credits: '3', plannedClasses: '30', minAttendance: '90',
           }
     );
 
@@ -133,6 +134,7 @@ export default function Academics() {
         semester: Number(subjectForm.semester),
         sectionId: subjectForm.sectionId,
         facultyId: subjectForm.facultyId,
+        taIds: subjectForm.taIds,
         credits: Number(subjectForm.credits),
         plannedClasses: Number(subjectForm.plannedClasses),
         minAttendance: Number(subjectForm.minAttendance),
@@ -359,6 +361,11 @@ export default function Academics() {
                           Unassigned
                         </span>
                       )}
+                      {s.tas?.length > 0 && (
+                        <span className="mt-0.5 block text-[11px] text-slate-500">
+                          TA: {s.tas.map((t) => t.name).join(', ')}
+                        </span>
+                      )}
                     </td>
                     <td className="nums px-4 py-3 text-right text-slate-600">{s.enrolledCount}</td>
                     <td className="nums px-4 py-3 text-right text-slate-600">
@@ -544,7 +551,14 @@ export default function Academics() {
             <Field label="Lecturer" hint="Shown against every period of this subject on the timetable.">
               <Select
                 value={subjectForm.facultyId}
-                onChange={(e) => setSubjectForm((f) => ({ ...f, facultyId: e.target.value }))}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setSubjectForm((f) => ({
+                    ...f,
+                    facultyId: id,
+                    taIds: f.taIds.filter((t) => t !== id),
+                  }));
+                }}
               >
                 <option value="">Choose…</option>
                 {/* The name alone. A load figure beside it is a different
@@ -556,6 +570,61 @@ export default function Academics() {
                   </option>
                 ))}
               </Select>
+            </Field>
+
+            <Field label="Teaching assistants">
+              {/* One at a time, each becoming a chip. A <select multiple> needs
+                  Ctrl held down to take a second name and drops the lot the
+                  moment it is let go. Names already picked, and the lecturer,
+                  are not offered — one person cannot be both, and the server
+                  refuses it. */}
+              <Select
+                value=""
+                onChange={(e) => {
+                  const id = e.target.value;
+                  if (id) setSubjectForm((cur) => ({ ...cur, taIds: [...cur.taIds, id] }));
+                }}
+              >
+                <option value="">Add a teaching assistant…</option>
+                {faculty
+                  .filter((f) => f.id !== subjectForm.facultyId && !subjectForm.taIds.includes(f.id))
+                  .map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+              </Select>
+
+              {subjectForm.taIds.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    {subjectForm.taIds.length} selected
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {subjectForm.taIds.map((id) => (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1 rounded-full bg-slate-100 py-1 pl-3 pr-1.5 text-sm text-slate-700"
+                      >
+                        {faculty.find((f) => f.id === id)?.name || 'Unknown'}
+                        <button
+                          type="button"
+                          aria-label="Remove"
+                          className="rounded-full px-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+                          onClick={() =>
+                            setSubjectForm((cur) => ({
+                              ...cur,
+                              taIds: cur.taIds.filter((x) => x !== id),
+                            }))
+                          }
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </Field>
 
             <div className="grid gap-3 sm:grid-cols-3">
