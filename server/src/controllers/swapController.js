@@ -75,6 +75,24 @@ const cohortOf = (entry) => ({
   semester: semesterOf(entry),
 });
 
+/**
+ * Two periods belonging to the same students.
+ *
+ * A swap is only ever offered within one cohort. Across sections it would take
+ * a class to an hour its own students are not sitting in, and the destination
+ * is almost always occupied anyway — the other section has its own class then.
+ * Keeping it within the cohort also makes the exchange safe by construction:
+ * the section vacates one period exactly as it fills the other, so there is
+ * nothing for it to collide with.
+ *
+ * An undivided year has no section at all, and two such periods are the same
+ * cohort only when they are the same year.
+ */
+const sameCohort = (a, b) =>
+  a.sectionId || b.sectionId
+    ? sameId(a.sectionId, b.sectionId)
+    : Number(semesterOf(a)) === Number(semesterOf(b));
+
 /** Section is passed too, so a period with no subject still reaches its cohort. */
 const audienceFor = (entry) =>
   studentAudience({ subjectId: entry.subjectId, sectionId: entry.sectionId });
@@ -112,6 +130,13 @@ export const createSwap = asyncHandler(async (req, res) => {
   if (!toFaculty) throw ApiError.badRequest('The other period has no lecturer assigned');
   if (sameId(toFaculty, fromFaculty)) {
     throw ApiError.badRequest('Both periods are yours — move the class instead of swapping');
+  }
+  if (!sameCohort(fromEntry, toEntry)) {
+    throw ApiError.badRequest(
+      `A class can only be swapped with another class of the same cohort — ${sectionLabel(
+        fromEntry.section
+      )} cannot exchange periods with ${sectionLabel(toEntry.section)}`
+    );
   }
 
   if (fromDate < todayKey() || toDate < todayKey()) {
@@ -363,6 +388,13 @@ export const decideSwap = asyncHandler(async (req, res) => {
     loadEntry(swap.toEntryId),
   ]);
   if (!fromEntry || !toEntry) throw ApiError.notFound('One of the classes no longer exists');
+
+  // Re-checked here too: a request raised before this rule could still be sitting pending.
+  if (approve && !sameCohort(fromEntry, toEntry)) {
+    throw ApiError.conflict(
+      'Those two classes belong to different cohorts, so they cannot be swapped. Reject this request.'
+    );
+  }
 
   if (!approve) {
     await prisma.swapRequest.update({
@@ -716,7 +748,13 @@ export const listSwapCandidates = asyncHandler(async (req, res) => {
     .filter((o) => o.kind === 'lecture')
     .filter((o) => o.date >= todayKey())
     .filter((o) => !sameId(o.entryId, mine))
-    .filter((o) => o.faculty && o.faculty.id !== myFaculty);
+    .filter((o) => o.faculty && o.faculty.id !== myFaculty)
+    // Same students only — see sameCohort above.
+    .filter((o) =>
+      mySection || o.section?.id
+        ? sameId(mySection, o.section?.id || null)
+        : Number(mySemester) === Number(o.semester)
+    );
 
   const slotLabel = await slotNamer(mine.subject?.semester || mine.section?.semester);
 

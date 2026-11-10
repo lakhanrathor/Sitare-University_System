@@ -94,3 +94,4 @@ seed().catch(async (err) => {
   await prisma.$disconnect();
   process.exit(1);
 });
+

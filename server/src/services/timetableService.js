@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma.js';
-import { dayOfWeek, weekDates } from '../utils/date.js';
+import { dayOfWeek, weekDates, todayKey, nowTime } from '../utils/date.js';
 import { idOf, sameId } from '../utils/ids.js';
 import { SLOTS, LUNCH, isTeachingDay } from '../config/slots.js';
 
@@ -43,6 +43,24 @@ export const slotsOf = (timetable) =>
        */
       timetable.slots.map((s) => ({ slot: s.slot, label: s.label, start: s.start, end: s.end }))
     : SLOTS;
+
+/**
+ * Whether a period is already over.
+ *
+ * Comparing dates alone is not enough: by mid-afternoon most of the working
+ * day is behind us, and a date-only check happily books this morning's nine
+ * o'clock. A class that has already happened cannot be booked into, moved
+ * onto, or brought back by undoing a change — it either took place or it did
+ * not, and the timetable is not where that gets decided afterwards.
+ */
+export function periodHasPassed(dateKey, slot, slots) {
+  const today = todayKey();
+  if (dateKey < today) return true;
+  if (dateKey > today) return false;
+  const end = (slots?.length ? slots : SLOTS).find((s) => Number(s.slot) === Number(slot))?.end;
+  // An unknown period has no end time to judge it by; leave it bookable.
+  return Boolean(end) && end <= nowTime();
+}
 
 /** Period times for a semester, for anywhere that needs to print a label. */
 export async function slotsForSemester(semester) {
@@ -456,6 +474,8 @@ export async function getFreeSlots(dateKey, { facultyId, sections, semester } = 
   const result = [];
   for (const section of sections || []) {
     for (const s of periods) {
+      // Nothing can be booked into an hour that is already over.
+      if (periodHasPassed(dateKey, s.slot, periods)) continue;
       const sectionFree =
         !busySection.has(`${section.id}|${s.slot}`) &&
         !wholeSemesterBusy.has(`${section.semester ?? semester}|${s.slot}`);

@@ -25,6 +25,15 @@ export function todayKey() {
   return local.toISOString().slice(0, 10);
 }
 
+/**
+ * Local wall-clock time as 'HH:MM', comparable against a period's start/end.
+ * Same shape the slot grid stores, so the two compare as plain strings.
+ */
+export function nowTime() {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
 export function isFutureKey(key) {
   return key > todayKey();
 }

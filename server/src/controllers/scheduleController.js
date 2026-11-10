@@ -15,6 +15,7 @@ import {
   getPublishedTimetable,
   slotsOf,
   labelOf,
+  periodHasPassed,
 } from '../services/timetableService.js';
 import {
   notify,
@@ -22,6 +23,7 @@ import {
   studentAudience,
 } from '../services/notificationService.js';
 import { emitToUsers } from '../sockets/index.js';
+import { teaches } from './subjectController.js';
 
 const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
 
@@ -59,6 +61,18 @@ function assertBookableDate(key) {
     throw ApiError.badRequest(`${dayName(dayOfWeek(key))} is not a teaching day`);
   }
   if (key < todayKey()) throw ApiError.badRequest('That date has already passed');
+}
+
+/**
+ * The same rule at period precision. `assertBookableDate` only knows about
+ * days, so on the current date it would let this morning's period be booked,
+ * moved onto, or restored — all of which describe a class that has already
+ * either happened or not.
+ */
+function assertPeriodNotPast(key, slot, slots, what = 'That period') {
+  if (periodHasPassed(key, slot, slots)) {
+    throw ApiError.badRequest(`${what} has already passed`);
+  }
 }
 
 /** Faculty may only touch their own periods; admin may touch any. */
@@ -163,6 +177,7 @@ export const bookExtraClass = asyncHandler(async (req, res) => {
   if (!periods.some((p) => p.slot === Number(slot))) {
     throw ApiError.badRequest('That period is not on this semester’s timetable');
   }
+  assertPeriodNotPast(date, slot, periods);
 
   let subject = null;
   if (subjectId) {
@@ -174,7 +189,7 @@ export const bookExtraClass = asyncHandler(async (req, res) => {
     if (!sameId(subject.sectionId, section)) {
       throw ApiError.badRequest(`${subject.code} is not offered to section ${section.name}`);
     }
-    if (req.user.role === 'faculty' && !sameId(subject.facultyId, req.user)) {
+    if (req.user.role === 'faculty' && !(await teaches(req.user, subject))) {
       throw ApiError.forbidden('You do not teach that subject');
     }
   } else if (!title) {
@@ -301,6 +316,12 @@ export const moveClass = asyncHandler(async (req, res) => {
   if (date === toDate && Number(toSlot) === entry.slot) {
     throw ApiError.badRequest('That is already the scheduled period');
   }
+  assertPeriodNotPast(
+    toDate,
+    toSlot,
+    await slotsForSemester(entry.subject?.semester || entry.section?.semester),
+    'The period you are moving to'
+  );
 
   const existing = await prisma.scheduleChange.findFirst({
     where: { entryId: entry.id, dateKey: date, kind: { in: ['move', 'cancel'] } },
@@ -510,6 +531,28 @@ export const undoChange = asyncHandler(async (req, res) => {
     if (!sameId(change.createdById, req.user)) {
       throw ApiError.forbidden('Only the person who made this change, or an admin, can undo it');
     }
+  }
+
+  /*
+   * Once the period is over the class either ran or it did not, and undoing the
+   * change now would be rewriting that after the fact. Both ends of a move
+   * count: restoring the original date means claiming the class nobody could
+   * still attend was the real one.
+   */
+  const slots = slotsOf(
+    change.timetableId
+      ? await prisma.timetable.findUnique({
+          where: { id: change.timetableId },
+          include: { slots: { orderBy: { slot: 'asc' } } },
+        })
+      : null
+  );
+  const occupies = [
+    [change.dateKey, change.slot ?? change.fromSlot],
+    [change.toDateKey, change.toSlot],
+  ].filter(([d, n]) => d && n != null);
+  if (occupies.some(([d, n]) => periodHasPassed(d, n, slots))) {
+    throw ApiError.badRequest('That class has already happened, so this can no longer be undone');
   }
 
   // Put an already-taken sheet back where it started.

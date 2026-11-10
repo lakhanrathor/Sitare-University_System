@@ -132,7 +132,8 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  subjects             Subject[]
+  subjects             Subject[]              @relation("SubjectFaculty")
+  assisting            SubjectAssistant[]
   enrollments          Enrollment[]
   sessionsTaught       ClassSession[]
   attendance           Attendance[]           @relation("AttendanceStudent")
@@ -200,18 +201,20 @@ model Subject {
   /// exactly one reason: purgeService leaves a subject standing but unassigned
   /// when its lecturer's account is deleted, so an admin can hand it on.
   facultyId String? @map("faculty_id") @db.Uuid
-  faculty   User?   @relation(fields: [facultyId], references: [id], onDelete: SetNull)
+  faculty   User?   @relation("SubjectFaculty", fields: [facultyId], references: [id], onDelete: SetNull)
+
 
   /// Planning context only. The attendance denominator is the count of
   /// completed sessions — never this.
   plannedClasses Int @default(30) @map("planned_classes")
-  minAttendance  Int @default(75) @map("min_attendance")
+  minAttendance  Int @default(90) @map("min_attendance")
 
   isActive Boolean @default(true) @map("is_active")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  assistants       SubjectAssistant[]
   enrollments      Enrollment[]
   sessions         ClassSession[]
   attendance       Attendance[]
@@ -232,6 +235,30 @@ model Subject {
   @@index([facultyId])
   @@map("subjects")
 }
+
+/// Teaching assistants on a subject — several are normal, which is why this is
+/// a table and not a column. An assistant gets the same access to the subject
+/// as its lecturer and is labelled a TA wherever they appear, so an assistant
+/// is never mistaken for the person the subject belongs to.
+///
+/// Cascade on both sides: the row only records a pairing, so it has nothing
+/// left to say once either half is gone. That the TA is not also the lecturer
+/// is enforced in the controller, not here — a CHECK cannot see faculty_id
+/// from this table.
+model SubjectAssistant {
+  subjectId String  @map("subject_id") @db.Uuid
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([subjectId, userId])
+  @@index([userId])
+  @@map("subject_assistants")
+}
+
 
 model Enrollment {
   id        String @id @default(uuid(7)) @db.Uuid

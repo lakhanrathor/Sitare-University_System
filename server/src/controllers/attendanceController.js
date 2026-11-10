@@ -12,7 +12,12 @@ import {
   slotsOf,
   labelOf,
 } from '../services/timetableService.js';
-import { assertSubjectAccess, assertRegisterAccess, sectionRef } from './subjectController.js';
+import {
+  assertSubjectAccess,
+  assertRegisterAccess,
+  sectionRef,
+  teaches,
+} from './subjectController.js';
 
 /**
  * The classes this caller is standing in on for `subjectId`, or null when the
@@ -69,10 +74,10 @@ async function standInClasses(user, subjectId) {
   if (user.role !== 'faculty') return null;
   const subject = await prisma.subject.findUnique({
     where: { id: subjectId },
-    select: { facultyId: true },
+    select: { id: true, facultyId: true },
   });
   if (!subject) return null;
-  if (sameId(subject.facultyId, user)) return null;
+  if (await teaches(user, subject)) return null;
   const rows = await prisma.attendanceDelegation.findMany({
     where: { subjectId, facultyId: idOf(user) },
   });
@@ -278,7 +283,7 @@ export const listSubjectOccurrences = asyncHandler(async (req, res) => {
    * occurrence's actual faculty rather than a fixed list of dates.
    */
   const coTeaching =
-    !standingIn && req.user.role === 'faculty' && !sameId(subject.facultyId, req.user);
+    !standingIn && req.user.role === 'faculty' && !(await teaches(req.user, subject));
 
   /*
    * Two different windows on purpose. The recurring grid only means anything

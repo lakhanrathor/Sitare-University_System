@@ -166,7 +166,7 @@ export async function getStudentSummary(studentId) {
   const totalPresent = bySubject.reduce((n, s) => n + s.present, 0);
   const overallPct = computePercentage(totalPresent, totalConducted);
   const minAttendance = bySubject.length
-    ? Math.max(...bySubject.map((s) => s.minAttendance ?? 75))
+    ? Math.max(...bySubject.map((s) => s.minAttendance ?? 90))
     : 75;
 
   return {
@@ -185,7 +185,7 @@ export async function getStudentSummary(studentId) {
 }
 
 /** 'good' | 'warning' | 'critical' | 'no-data' — drives the colour coding. */
-export function attendanceStatusLabel(percentage, minAttendance = 75) {
+export function attendanceStatusLabel(percentage, minAttendance = 90) {
   if (percentage === null || percentage === undefined) return 'no-data';
   if (percentage >= minAttendance) return 'good';
   if (percentage >= minAttendance - 10) return 'warning';

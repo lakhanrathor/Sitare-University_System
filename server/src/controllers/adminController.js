@@ -79,9 +79,11 @@ export const subjectSchema = z.object({
   semester: z.number().int().min(1).max(10),
   sectionId: z.string().min(1, 'Choose a section'),
   facultyId: z.string().min(1, 'Assign a lecturer'),
+  // Omitted leaves the assistants alone; an empty array clears them.
+  taIds: z.array(z.string().uuid()).max(10).optional(),
   credits: z.number().int().min(1).max(10).optional().default(3),
   plannedClasses: z.number().int().min(1).max(200).optional().default(30),
-  minAttendance: z.number().int().min(0).max(100).optional().default(75),
+  minAttendance: z.number().int().min(0).max(100).optional().default(90),
   enrolAllInSection: z.boolean().optional().default(true),
 });
 
@@ -1108,6 +1110,7 @@ export const listSubjectsAdmin = asyncHandler(async (req, res) => {
     where,
     include: {
       faculty: { select: { id: true, name: true, email: true } },
+      assistants: { select: { user: { select: { id: true, name: true } } } },
       section: { select: { id: true, name: true, semester: true } },
     },
     orderBy: [{ semester: 'asc' }, { code: 'asc' }],
@@ -1189,6 +1192,7 @@ export const listSubjectsAdmin = asyncHandler(async (req, res) => {
         isActive: s.isActive,
         section: s.section ? { id: s.section.id, name: s.section.name } : null,
         faculty: s.faculty ? { id: s.faculty.id, name: s.faculty.name } : null,
+        tas: (s.assistants || []).map((a) => ({ id: a.user.id, name: a.user.name })),
         // Ready-to-display label — "Mr Ankit Mehta" when only one person
         // teaches it, "Mr Ankit Mehta/Dr Anuja Agarwal" when more than one
         // actually does, null when the subject has no lecturer at all.
@@ -1200,8 +1204,30 @@ export const listSubjectsAdmin = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * The assistants a request asked for, checked before any of them is written.
+ *
+ * Refuses the lecturer: the two are shown side by side, and one name in both
+ * places reads as a bug rather than a decision. Refuses anyone who is not
+ * faculty — a student with a lecturer's access to a register is the worst
+ * thing this could get wrong — and refuses in full rather than partly, so a
+ * half-applied list never reaches the table.
+ */
+async function resolveAssistants(taIds, facultyId) {
+  const ids = [...new Set(taIds || [])];
+  if (!ids.length) return [];
+  if (ids.some((id) => sameId(id, facultyId))) {
+    throw ApiError.badRequest('A TA cannot also be the lecturer — remove them from the TA list');
+  }
+  const people = await prisma.user.findMany({ where: { id: { in: ids }, role: 'faculty' } });
+  if (people.length !== ids.length) {
+    throw ApiError.badRequest('Every TA must be a faculty member');
+  }
+  return people;
+}
+
 export const createSubject = asyncHandler(async (req, res) => {
-  const { code, name, semester, sectionId, facultyId, enrolAllInSection, ...rest } = req.body;
+  const { code, name, semester, sectionId, facultyId, taIds, enrolAllInSection, ...rest } = req.body;
 
   const [section, faculty] = await Promise.all([
     sectionId ? prisma.section.findUnique({ where: { id: sectionId } }) : null,
@@ -1222,8 +1248,11 @@ export const createSubject = asyncHandler(async (req, res) => {
     throw ApiError.conflict(`${code.toUpperCase()} already exists for section ${section.name}`);
   }
 
+  const assistants = await resolveAssistants(taIds, faculty.id);
+
   const subject = await prisma.subject.create({
     data: {
+      assistants: { create: assistants.map((a) => ({ userId: a.id })) },
       ...rest,
       // Uppercased here as well as by the database CHECK: the constraint makes
       // a miss loud, this makes there be nothing to miss.
@@ -1270,7 +1299,7 @@ export const updateSubject = asyncHandler(async (req, res) => {
   const subject = await prisma.subject.findUnique({ where: { id: req.params.subjectId } });
   if (!subject) throw ApiError.notFound('Subject not found');
 
-  const { facultyId, ...rest } = req.body;
+  const { facultyId, taIds, ...rest } = req.body;
   // A departing lecturer leaves a subject with no faculty (see purgeUsers) —
   // that is not a real id, so it must never be cast into a query filter below.
   const previous = subject.facultyId || null;
@@ -1298,6 +1327,44 @@ export const updateSubject = asyncHandler(async (req, res) => {
       link: '/',
       createdBy: idOf(req.user),
     });
+  }
+
+  /*
+   * Undefined means the form did not send a list, so leave the assistants
+   * alone. An empty array is how they are all removed.
+   */
+  let newAssistants = [];
+  if (taIds !== undefined) {
+    const people = await resolveAssistants(taIds, data.facultyId || previous);
+    const before = await prisma.subjectAssistant.findMany({
+      where: { subjectId: subject.id },
+      select: { userId: true },
+    });
+    const had = new Set(before.map((r) => r.userId));
+    newAssistants = people.filter((p) => !had.has(p.id));
+
+    // Replaced as a set: the form sends the list as it should now be, and
+    // reconciling additions and removals separately is two ways to be wrong.
+    await prisma.$transaction([
+      prisma.subjectAssistant.deleteMany({ where: { subjectId: subject.id } }),
+      prisma.subjectAssistant.createMany({
+        data: people.map((p) => ({ subjectId: subject.id, userId: p.id })),
+      }),
+    ]);
+  }
+
+  // Only the ones who were not already on it — nobody needs telling twice.
+  if (newAssistants.length) {
+    await notify(
+      newAssistants.map((p) => p.id),
+      {
+        type: 'subject:assigned',
+        title: 'You are a TA for a subject',
+        message: `You are a teaching assistant for ${subject.code} ${subject.name}.`,
+        link: '/',
+        createdBy: idOf(req.user),
+      }
+    );
   }
 
   const updated = await prisma.subject.update({ where: { id: subject.id }, data });

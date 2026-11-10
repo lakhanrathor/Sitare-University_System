@@ -266,7 +266,7 @@ async function createSubjectForEntry(entry, { name, code, semester, facultyId })
       facultyId: facultyId || null,
       department: sections[0]?.department || 'Computer Science',
       plannedClasses: 30,
-      minAttendance: 75,
+      minAttendance: 90,
     },
   });
 
@@ -1152,7 +1152,7 @@ async function buildEntriesFromRecords(records, semester, { create = false, acto
         facultyId: resolvedFaculty ? idOf(resolvedFaculty) : null,
         department: sections[0]?.department || 'Computer Science',
         plannedClasses: 30,
-        minAttendance: 75,
+        minAttendance: 90,
       },
     });
     createdSubjects.set(key, doc);

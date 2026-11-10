@@ -6,6 +6,7 @@ import { idOf, sameId } from '../utils/ids.js';
 import { sectionIdOf } from '../utils/user.js';
 import { putFile, openFile, deleteFiles } from '../services/fileStore.js';
 import { notify, withdrawNotifications } from '../services/notificationService.js';
+import { teaches } from './subjectController.js';
 
 /*
  * Course material, shared with a cohort.
@@ -162,7 +163,7 @@ export const createNote = asyncHandler(async (req, res) => {
      * could file material under a colleague's subject, where it would look
      * like the colleague had posted it.
      */
-    if (req.user.role === 'faculty' && !sameId(subject.facultyId, req.user)) {
+    if (req.user.role === 'faculty' && !(await teaches(req.user, subject))) {
       throw ApiError.forbidden('You do not teach that subject');
     }
   }

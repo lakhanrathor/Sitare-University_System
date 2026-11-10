@@ -23,6 +23,25 @@ async function hasFacultyOverride(subjectId, userId) {
 }
 
 /** Faculty may only touch their own subjects; admin may touch any. */
+/**
+ * Is this subject theirs to run — as its lecturer, or as one of its TAs?
+ *
+ * The one definition of that, so a TA cannot be let into one screen and
+ * refused by the next. Asynchronous because assistants are rows, not a
+ * column: the lookup only happens for someone who is not the lecturer, and
+ * it is a primary-key hit when it does.
+ */
+export async function teaches(user, subject) {
+  if (sameId(subject.facultyId, user)) return true;
+  const subjectId = idOf(subject);
+  if (!subjectId) return false;
+  const row = await prisma.subjectAssistant.findUnique({
+    where: { subjectId_userId: { subjectId, userId: idOf(user) } },
+    select: { userId: true },
+  });
+  return Boolean(row);
+}
+
 export async function assertSubjectAccess(user, subjectId) {
   /*
    * Deliberately without its relations: callers pass subject.sectionId straight
@@ -32,7 +51,7 @@ export async function assertSubjectAccess(user, subjectId) {
   const subject = await prisma.subject.findUnique({ where: { id: subjectId } });
   if (!subject) throw ApiError.notFound('Subject not found');
   if (user.role === 'admin') return subject;
-  if (user.role === 'faculty' && sameId(subject.facultyId, user)) return subject;
+  if (user.role === 'faculty' && (await teaches(user, subject))) return subject;
 
   if (user.role === 'faculty' && (await hasFacultyOverride(subject.id, idOf(user)))) return subject;
 
@@ -53,7 +72,7 @@ export async function assertRegisterAccess(user, subjectId, dateKey, slot) {
   const subject = await prisma.subject.findUnique({ where: { id: subjectId } });
   if (!subject) throw ApiError.notFound('Subject not found');
   if (user.role === 'admin') return subject;
-  if (user.role === 'faculty' && sameId(subject.facultyId, user)) return subject;
+  if (user.role === 'faculty' && (await teaches(user, subject))) return subject;
 
   if (user.role === 'faculty') {
     const delegated = await prisma.attendanceDelegation.findFirst({
@@ -136,6 +155,7 @@ export const listSubjects = asyncHandler(async (req, res) => {
 
   const withRelations = {
     faculty: { select: { id: true, name: true, email: true } },
+    assistants: { select: { user: { select: { id: true, name: true } } } },
     section: { select: { id: true, name: true } },
   };
 
@@ -145,6 +165,7 @@ export const listSubjects = asyncHandler(async (req, res) => {
         isActive: true,
         OR: [
           { facultyId: userId },
+          { assistants: { some: { userId } } },
           { id: { in: [...delegatedBySubject.keys()] } },
           { id: { in: overriddenSubjectIds } },
         ],
@@ -249,6 +270,16 @@ export const listSubjects = asyncHandler(async (req, res) => {
         // needs the section to tell them apart.
         section: s.section ? { id: s.section.id, name: s.section.name } : null,
         faculty: s.faculty ? { id: s.faculty.id, name: s.faculty.name } : null,
+        tas: (s.assistants || []).map((a) => ({ id: a.user.id, name: a.user.name })),
+        /*
+         * Set only when the caller is the assistant rather than the lecturer.
+         * A TA has the same access to this subject, so nothing about what they
+         * can do reads off this — it exists so the screen can say whose
+         * subject it actually is.
+         */
+        assisting: (s.assistants || []).some((a) => sameId(a.user.id, userId))
+          ? { forName: s.faculty?.name || null }
+          : null,
         /*
          * Set only when the caller is standing in rather than teaching this.
          * The dates are listed because the hand-over covers those classes and
